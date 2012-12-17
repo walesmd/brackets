@@ -14,3 +14,5 @@ src/extensions/disabled
 
 # unit test working directory
 test/temp
+
+node_modules

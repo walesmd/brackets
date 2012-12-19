@@ -1,9 +1,12 @@
-module.exports = function(grunt) {
+/*global module */
+module.exports = function (grunt) {
+    "use strict";
 
     // Project configuration.
     grunt.initConfig({
         jshint: {
             all: [
+                "Gruntfile.js",
                 "src/**/*.js",
                 "test/**/*.js",
                 "!**/thirdparty/**",

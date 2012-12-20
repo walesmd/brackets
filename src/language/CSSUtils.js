@@ -56,7 +56,7 @@ define(function (require, exports, module) {
     function _isInPropName(ctx) {
         var state,
             lastToken;
-        if (!ctx || !ctx.token || !ctx.token.state) {
+        if (!ctx || !ctx.token || !ctx.token.state || ctx.token.className === "comment") {
             return false;
         }
 
@@ -80,7 +80,7 @@ define(function (require, exports, module) {
      */
     function _isInPropValue(ctx) {
         var state;
-        if (!ctx || !ctx.token || !ctx.token.state ||
+        if (!ctx || !ctx.token || !ctx.token.state || ctx.token.className === "comment" ||
                 ctx.token.className === "variable" || ctx.token.className === "tag") {
             return false;
         }
@@ -96,23 +96,27 @@ define(function (require, exports, module) {
     /**
      * @private
      * Creates a context info object
-     * @param {string} context A constant string 
-     * @param {number} offset The offset of the token for a given cursor position
-     * @param {string} name Property name of the context 
-     * @param {number} index The index of the property value for a given cursor position
-     * @param {Array.<string>} values An array of property values 
+     * @param {string=} context A constant string 
+     * @param {number=} offset The offset of the token for a given cursor position
+     * @param {string=} name Property name of the context 
+     * @param {number=} index The index of the property value for a given cursor position
+     * @param {Array.<string>=} values An array of property values 
+     * @param {boolean=} isNewItem If this is true, then the value in index refers to the index at which a new item  
+     *     is going to be inserted and should not be used for accessing an existing value in values array. 
      * @return {{context: string,
      *           offset: number,
      *           name: string,
      *           index: number,
-     *           values: Array.<string>}} A CSS context info object.
+     *           values: Array.<string>,
+     *           isNewItem: boolean}} A CSS context info object.
      */
-    function createInfo(context, offset, name, index, values) {
+    function createInfo(context, offset, name, index, values, isNewItem) {
         var ruleInfo = { context: context || "",
                          offset: offset || 0,
                          name: name || "",
                          index: -1,
-                         values: [] };
+                         values: [],
+                         isNewItem: (isNewItem) ? true : false };
         
         if (context === PROP_VALUE || context === SELECTOR) {
             ruleInfo.index = index;
@@ -164,16 +168,26 @@ define(function (require, exports, module) {
                     ctx.token.string === ";") {
                 break;
             }
+
             curValue = ctx.token.string;
             if (lastValue !== "") {
                 curValue += lastValue;
             }
+
             if ((ctx.token.string.length > 0 && !ctx.token.string.match(/\S/)) ||
                     ctx.token.string === ",") {
                 lastValue = curValue;
             } else {
                 lastValue = "";
-                propValues.push(curValue);
+                if (propValues.length === 0 || curValue.match(/,\s*$/)) {
+                    // stack is empty, or current value ends with a comma
+                    // (and optional whitespace), so push it on the stack
+                    propValues.push(curValue);
+                } else {
+                    // current value does not end with a comma (and optional ws) so prepend
+                    // to last stack item (e.g. "rgba(50" get broken into 2 tokens)
+                    propValues[propValues.length - 1] = curValue + propValues[propValues.length - 1];
+                }
             }
         }
         if (propValues.length > 0) {
@@ -220,6 +234,9 @@ define(function (require, exports, module) {
                 } else if (lastValue && lastValue.match(/,$/)) {
                     propValues.push(lastValue);
                     lastValue = "";
+                } else {
+                    // e.g. "rgba(50" gets broken into 2 tokens
+                    lastValue += ctx.token.string;
                 }
             }
         }
@@ -239,11 +256,16 @@ define(function (require, exports, module) {
      *           offset: number,
      *           name: string,
      *           index: number,
-     *           values: Array.<string>}} A CSS context info object.
+     *           values: Array.<string>,
+     *           isNewItem: boolean}} A CSS context info object.
      */
     function _getRuleInfoStartingFromPropValue(ctx, editor) {
-        var backwardCtx = $.extend({}, ctx),
-            forwardCtx = $.extend({}, ctx),
+        var propNamePos = $.extend({}, ctx.pos),
+            backwardPos = $.extend({}, ctx.pos),
+            forwardPos  = $.extend({}, ctx.pos),
+            propNameCtx = TokenUtils.getInitialContext(editor._codeMirror, propNamePos),
+            backwardCtx,
+            forwardCtx,
             lastValue = "",
             propValues = [],
             index = -1,
@@ -255,12 +277,13 @@ define(function (require, exports, module) {
         
         // Get property name first. If we don't have a valid property name, then 
         // return a default rule info.
-        propName = _getPropNameStartingFromPropValue(ctx);
+        propName = _getPropNameStartingFromPropValue(propNameCtx);
         if (!propName) {
             return createInfo();
         }
         
         // Scan backward to collect all preceding property values
+        backwardCtx = TokenUtils.getInitialContext(editor._codeMirror, backwardPos);
         propValues = _getPrecedingPropValues(backwardCtx);
 
         lastValue = "";
@@ -278,28 +301,35 @@ define(function (require, exports, module) {
                 lastValue = ctx.token.string.trim();
                 if (lastValue.length === 0) {
                     canAddNewOne = true;
+                    if (index > 0) {
+                        // Append all spaces before the cursor to the previous value in values array
+                        propValues[index - 1] += ctx.token.string.substr(0, offset);
+                    }
                 }
             }
         }
         
         if (canAddNewOne) {
             offset = 0;
-            if (testToken.string.length > 0 && !testToken.string.match(/\S/)) {
-                propValues.push("");
+
+            // If pos is at EOL, then there's implied whitespace (newline).
+            if (editor.document.getLine(ctx.pos.line).length > ctx.pos.ch  &&
+                    (testToken.string.length === 0 || testToken.string.match(/\S/))) {
+                canAddNewOne = false;
             }
         }
         
         // Scan forward to collect all succeeding property values and append to all propValues.
+        forwardCtx = TokenUtils.getInitialContext(editor._codeMirror, forwardPos);
         propValues = propValues.concat(_getSucceedingPropValues(forwardCtx, lastValue));
-
+        
         // If current index is more than the propValues size, then the cursor is 
-        // at the end of the existing property values and ready for adding another one.
-        // So add a new empty string for the new one in propValues.
+        // at the end of the existing property values and is ready for adding another one.
         if (index === propValues.length) {
-            propValues.push("");
+            canAddNewOne = true;
         }
-               
-        return createInfo(PROP_VALUE, offset, propName, index, propValues);
+        
+        return createInfo(PROP_VALUE, offset, propName, index, propValues, canAddNewOne);
     }
     
     /**
@@ -310,7 +340,8 @@ define(function (require, exports, module) {
      *           offset: number,
      *           name: string,
      *           index: number,
-     *           values: Array.<string>}} A CSS context info object.
+     *           values: Array.<string>,
+     *           isNewItem: boolean}} A CSS context info object.
      */
     function getInfoAtPos(editor, constPos) {
         // We're going to be changing pos a lot, but we don't want to mess up

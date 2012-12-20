@@ -233,10 +233,17 @@ define(function (require, exports, module) {
     }
 
     function _handleSelectAll() {
-        var editor = EditorManager.getFocusedEditor();
+        var result = new $.Deferred(),
+            editor = EditorManager.getFocusedEditor();
+
         if (editor) {
             editor._selectAllVisible();
+            result.resolve();
+        } else {
+            result.reject();    // command not handled
         }
+
+        return result.promise();
     }
     
     /**
@@ -482,7 +489,7 @@ define(function (require, exports, module) {
                 newText = change.text.join('\n');
                 if (!change.from || !change.to) {
                     if (change.from || change.to) {
-                        console.assert(false, "Change record received with only one end undefined--replacing entire text");
+                        console.error("Change record received with only one end undefined--replacing entire text");
                     }
                     cm.setValue(newText);
                 } else {

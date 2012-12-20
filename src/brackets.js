@@ -293,6 +293,9 @@ define(function (require, exports, module) {
         
         // Check for updates
         if (!params.get("skipUpdateCheck") && !brackets.inBrowser) {
+            // check once a day, plus 2 minutes, 
+            // as the check will skip if the last check was not -24h ago
+            window.setInterval(UpdateNotification.checkForUpdate, 86520000);
             UpdateNotification.checkForUpdate();
         }
     }
@@ -309,7 +312,18 @@ define(function (require, exports, module) {
     // not steal focus. Calling preventDefault() on mousedown prevents
     // focus from going to the click target.
     $("html").on("mousedown", ".no-focus", function (e) {
-        e.preventDefault();
+        // Text fields should always be focusable.
+        var $target = $(e.target),
+            isTextField =
+                $target.is("input[type=text]") ||
+                $target.is("input[type=number]") ||
+                $target.is("input[type=password]") ||
+                $target.is("input:not([type])") || // input with no type attribute defaults to text
+                $target.is("textarea");
+
+        if (!isTextField) {
+            e.preventDefault();
+        }
     });
     
     // Localize MainViewHTML and inject into <BODY> tag

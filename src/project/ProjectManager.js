@@ -556,9 +556,21 @@ define(function (require, exports, module) {
         return result.promise();
     }
     
-    /** @param {Entry} entry File or directory to filter */
+    /**
+     * Returns false for files and directories that are not commonly useful to display.
+     *
+     * @param {Entry} entry File or directory to filter
+     * @return boolean true if the file should be displayed
+     */
     function shouldShow(entry) {
-        return [".git", ".gitignore", ".gitmodules", ".svn", ".DS_Store", "Thumbs.db"].indexOf(entry.name) === -1;
+        if ([".git", ".gitignore", ".gitmodules", ".svn", ".DS_Store", "Thumbs.db"].indexOf(entry.name) > -1) {
+            return false;
+        }
+        var extension = entry.name.split('.').pop();
+        if (["pyc"].indexOf(extension) > -1) {
+            return false;
+        }
+        return true;
     }
 
     /**
@@ -1268,7 +1280,8 @@ define(function (require, exports, module) {
                     }
                     
                     var oldName = selected.data("entry").fullPath;
-                    var newName = oldName.replace(data.rslt.old_name, data.rslt.new_name);
+                    var oldNameRegex = new RegExp(StringUtils.regexEscape(data.rslt.old_name) + "$");
+                    var newName = oldName.replace(oldNameRegex, data.rslt.new_name);
                     
                     renameItem(oldName, newName, isFolder)
                         .done(function () {

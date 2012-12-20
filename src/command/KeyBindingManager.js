@@ -120,34 +120,30 @@ define(function (require, exports, module) {
             key = "",
             error = false;
 
-        function _compareModifierString(left, right, previouslyFound, origDescriptor) {
+        function _compareModifierString(left, right) {
             if (!left || !right) {
                 return false;
             }
             left = left.trim().toLowerCase();
             right = right.trim().toLowerCase();
-            var matched = (left.length > 0 && left === right);
-            if (matched && previouslyFound) {
-                console.log("KeyBindingManager normalizeKeyDescriptorString() - Modifier " + left + " defined twice: " + origDescriptor);
-            }
-            return matched;
+            
+            return (left.length > 0 && left === right);
         }
         
         origDescriptor.split("-").forEach(function parseDescriptor(ele, i, arr) {
-            if (_compareModifierString("ctrl", ele, hasCtrl, origDescriptor)) {
+            if (_compareModifierString("ctrl", ele)) {
                 if (brackets.platform === "mac") {
                     hasMacCtrl = true;
                 } else {
                     hasCtrl = true;
                 }
-            } else if (_compareModifierString("cmd", ele, hasCtrl, origDescriptor)) {
+            } else if (_compareModifierString("cmd", ele)) {
                 hasCtrl = true;
-            } else if (_compareModifierString("alt", ele, hasAlt, origDescriptor)) {
+            } else if (_compareModifierString("alt", ele)) {
                 hasAlt = true;
-            } else if (_compareModifierString("opt", ele, hasAlt, origDescriptor)) {
-                console.log("KeyBindingManager normalizeKeyDescriptorString() - Opt getting mapped to Alt from: " + origDescriptor);
+            } else if (_compareModifierString("opt", ele)) {
                 hasAlt = true;
-            } else if (_compareModifierString("shift", ele, hasShift, origDescriptor)) {
+            } else if (_compareModifierString("shift", ele)) {
                 hasShift = true;
             } else if (key.length > 0) {
                 console.log("KeyBindingManager normalizeKeyDescriptorString() - Multiple keys defined. Using key: " + key + " from: " + origDescriptor);
@@ -351,8 +347,12 @@ define(function (require, exports, module) {
             normalizedDisplay,
             explicitPlatform = keyBinding.platform || platform,
             targetPlatform = explicitPlatform || brackets.platform,
-            command;
+            command,
+            bindingsToDelete = [],
+            existing;
         
+        // if the request does not specify an explicit platform, and we're
+        // currently on a mac, then replace Ctrl with Cmd.
         key = (keyBinding.key) || keyBinding;
         if (brackets.platform === "mac" && explicitPlatform === undefined) {
             key = key.replace("Ctrl", "Cmd");
@@ -368,21 +368,14 @@ define(function (require, exports, module) {
             return null;
         }
         
-        // skip if the key is already assigned
-        if (_isKeyAssigned(normalized)) {
-            console.log("Cannot assign " + normalized + " to " + commandID +
-                        ". It is already assigned to " + _keyMap[normalized].commandID);
-            return null;
-        }
+        // check for duplicate key bindings
+        existing = _keyMap[normalized];
         
         // for cross-platform compatibility
-        if (brackets.platform !== "mac" &&
-                brackets.platform !== "win") {
+        if (exports.useWindowsCompatibleBindings) {
+            // windows-only key bindings are used as the default binding
+            // only if a default binding wasn't already defined
             if (explicitPlatform === "win") {
-                // windows-only key bindings are used as the default binding
-                // only if a default binding wasn't already defined
-                var existing = _keyMap[normalized];
-                
                 // search for a generic or platform-specific binding if it
                 // already exists
                 if (existing &&
@@ -393,24 +386,6 @@ define(function (require, exports, module) {
                 
                 // target this windows binding for the current platform
                 targetPlatform = brackets.platform;
-            } else if (!explicitPlatform || (explicitPlatform === brackets.platform)) {
-                // if adding a generic binding or a binding for the current
-                // platform, clobber any windows bindings that may have been
-                // installed
-                var existingBindings = _commandMap[commandID] || [],
-                    bindingsToDelete = [];
-                
-                // filter out windows-only bindings in _commandMap
-                existingBindings.forEach(function (binding) {
-                    if (binding.explicitPlatform === "win") {
-                        bindingsToDelete.push(binding);
-                    }
-                });
-                
-                // delete windows-only bindings in _keyMap
-                bindingsToDelete.forEach(function (binding) {
-                    removeBinding(binding.key);
-                });
             }
         }
         
@@ -418,6 +393,47 @@ define(function (require, exports, module) {
         if (targetPlatform !== brackets.platform) {
             return null;
         }
+        
+        // skip if the key is already assigned explicitly for this platform
+        if (existing) {
+            if (!existing.explicitPlatform) {
+                // remove existing generic bindings, then re-map this binding
+                // to the new command
+                removeBinding(normalized);
+            } else {
+                // do not re-assign a platform-specific key binding
+                console.log("Cannot assign " + normalized + " to " + commandID +
+                            ". It is already assigned to " + _keyMap[normalized].commandID);
+                return null;
+            }
+        }
+        
+        // delete existing bindings when
+        // (1) replacing a windows-compatible binding with a generic or
+        //     platform-specific binding
+        // (2) replacing a generic binding with a platform-specific binding
+        var existingBindings = _commandMap[commandID] || [],
+            isWindowsCompatible,
+            isReplaceGeneric;
+        
+        existingBindings.forEach(function (binding) {
+            // remove windows-only bindings in _commandMap
+            isWindowsCompatible = exports.useWindowsCompatibleBindings &&
+                binding.explicitPlatform === "win";
+            
+            // remove existing generic binding
+            isReplaceGeneric = !binding.explicitPlatform &&
+                explicitPlatform;
+            
+            if (isWindowsCompatible || isReplaceGeneric) {
+                bindingsToDelete.push(binding);
+            }
+        });
+                
+        // remove generic or windows-compatible bindigns
+        bindingsToDelete.forEach(function (binding) {
+            removeBinding(binding.key);
+        });
         
         // optional display-friendly string (e.g. CMD-+ instead of CMD-=)
         normalizedDisplay = (keyBinding.displayKey) ? normalizeKeyDescriptorString(keyBinding.displayKey) : normalized;
@@ -469,8 +485,11 @@ define(function (require, exports, module) {
      */
     function handleKey(key) {
         if (_enabled && _keyMap[key]) {
-            CommandManager.execute(_keyMap[key].commandID);
-            return true;
+            // The execute() function returns a promise because some commands are async.
+            // Generally, commands decide whether they can run or not synchronously,
+            // and reject immediately, so we can test for that synchronously.
+            var promise = CommandManager.execute(_keyMap[key].commandID);
+            return (promise.state() === "rejected") ? false : true;
         }
         return false;
     }
@@ -508,7 +527,6 @@ define(function (require, exports, module) {
         }
         
         var normalizedBindings = [],
-            targetPlatform,
             results;
 
         if (Array.isArray(keyBindings)) {
@@ -570,6 +588,9 @@ define(function (require, exports, module) {
             },
             true
         );
+        
+        exports.useWindowsCompatibleBindings = (brackets.platform !== "mac")
+            && (brackets.platform !== "win");
     }
     
     $(CommandManager).on("commandRegistered", _handleCommandRegistered);
@@ -586,4 +607,14 @@ define(function (require, exports, module) {
     exports.removeBinding = removeBinding;
     exports.formatKeyDescriptor = formatKeyDescriptor;
     exports.getKeyBindings = getKeyBindings;
+    
+    /**
+     * Use windows-specific bindings if no other are found (e.g. Linux). 
+     * Core Brackets modules that use key bindings should always define at
+     * least a generic keybinding that is applied for all platforms. This 
+     * setting effectively creates a compatibility mode for third party
+     * extensions that define explicit key bindings for Windows and Mac, but
+     * not Linux.
+     */
+    exports.useWindowsCompatibleBindings = false;
 });

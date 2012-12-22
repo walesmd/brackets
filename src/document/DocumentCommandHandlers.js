@@ -33,12 +33,10 @@ define(function (require, exports, module) {
     // Load dependent modules
     var CommandManager      = require("command/CommandManager"),
         Commands            = require("command/Commands"),
-        KeyBindingManager   = require("command/KeyBindingManager"),
         NativeFileSystem    = require("file/NativeFileSystem").NativeFileSystem,
         ProjectManager      = require("project/ProjectManager"),
         DocumentManager     = require("document/DocumentManager"),
         EditorManager       = require("editor/EditorManager"),
-        FileViewController  = require("project/FileViewController"),
         FileUtils           = require("file/FileUtils"),
         StringUtils         = require("utils/StringUtils"),
         Async               = require("utils/Async"),
@@ -643,9 +641,9 @@ define(function (require, exports, module) {
             
             message += "<ul>";
             unsavedDocs.forEach(function (doc) {
-                message += "<li><span class='dialog-filename'>"
-                    + StringUtils.htmlEscape(ProjectManager.makeProjectRelativeIfPossible(doc.file.fullPath))
-                    + "</span></li>";
+                message += "<li><span class='dialog-filename'>" +
+                    StringUtils.htmlEscape(ProjectManager.makeProjectRelativeIfPossible(doc.file.fullPath)) +
+                    "</span></li>";
             });
             message += "</ul>";
             

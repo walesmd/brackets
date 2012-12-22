@@ -249,10 +249,6 @@ define(function (require, exports, module) {
                 // If we sucessfully got the metadata for the SpecRunner.html file, 
                 // enable the menu item
                 CommandManager.get(Commands.DEBUG_RUN_UNIT_TESTS).setEnabled(true);
-            },
-            function (error) {
-                // Error getting metadata. 
-                // The menu item is already disabled, so there is nothing to do here.
             }
         );
     }

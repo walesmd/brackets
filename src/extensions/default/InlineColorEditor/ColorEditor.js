@@ -570,16 +570,12 @@ define(function (require, exports, module) {
     };
 
     ColorEditor.prototype._handleHslKeydown = function (event) {
-        switch (event.keyCode) {
-        case KeyEvent.DOM_VK_TAB:
+        if ((event.keyCode === KeyEvent.DOM_VK_TAB) &&
+                (!event.shiftKey) &&
+                (this.$swatches.children().length === 0)) {
             // If we're the last focusable element (no color swatches), Tab wraps around to color square
-            if (!event.shiftKey) {
-                if (this.$swatches.children().length === 0) {
-                    this.$selectionBase.focus();
-                    return false;
-                }
-            }
-            break;
+            this.$selectionBase.focus();
+            return false;
         }
     };
 

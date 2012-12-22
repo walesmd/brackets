@@ -60,6 +60,7 @@ define(function (require, exports, module) {
             FileUtils.convertToNativePath(decodeURI(window.location.href)),
             function (err) {
                 // Ignore errors
+                return;
             }
         );
     }

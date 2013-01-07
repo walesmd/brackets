@@ -478,20 +478,6 @@ define(function (require, exports, module) {
     }
     
     
-    function _settingsForMode(mode) {
-        var settings = modeSettings[mode];
-        
-        if (!settings) {
-            var language = Languages.getLanguageForCodeMirrorMode(mode);
-            if (language && language.syntax) {
-                settings = language.syntax;
-            }
-        }
-        
-        return settings;
-    }
-    
-    
     /**
      * Invokes a language-specific block-comment/uncomment handler
      * @param {?Editor} editor If unspecified, applies to the currently focused editor
@@ -503,7 +489,7 @@ define(function (require, exports, module) {
         }
         
         var mode     = editor.getModeForSelection(),
-            settings = _settingsForMode(mode);
+            settings = modeSettings[mode] || Languages.getLanguageForMode(mode);
         
         if (!settings) {
             return;
@@ -525,7 +511,7 @@ define(function (require, exports, module) {
         }
         
         var mode     = editor.getModeForSelection(),
-            settings = _settingsForMode(mode);
+            settings = modeSettings[mode] || Languages.getLanguageForMode(mode);
         
         if (!settings) {
             return;

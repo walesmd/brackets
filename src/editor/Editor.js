@@ -269,7 +269,7 @@ define(function (require, exports, module) {
      *          Editor for the Document. If false, this Editor will attach to the Document as a "slave"/
      *          secondary editor.
      * @param {!string} mode  Syntax-highlighting language mode; "" means plain-text mode.
-     *          See {@link EditorUtils#getModeFromFileExtension()}.
+     *          See {@link Languages#getLanguageFromFileExtension()} and {@link Language.mode}.
      * @param {!jQueryObject} container  Container to add the editor to.
      * @param {!Object<string, function(Editor)>} additionalKeys  Mapping of keyboard shortcuts to
      *          custom handler functions. Mapping is in CodeMirror format
@@ -1060,7 +1060,7 @@ define(function (require, exports, module) {
      * an *approximation* of whether the mode is consistent across the whole range (a pattern like
      * A-B-A would return A as the mode, not null).
      *
-     * @return {?(Object|String)} Object or Name of syntax-highlighting mode; see {@link EditorUtils#getModeFromFileExtension()}.
+     * @return {?(Object|String)} Object or Name of syntax-highlighting mode; {@link Languages#getLanguageFromFileExtension()} and {@link Language.mode}.
      */
     Editor.prototype.getModeForSelection = function () {
         var sel = this.getSelection();
@@ -1094,7 +1094,7 @@ define(function (require, exports, module) {
     /**
      * Gets the syntax-highlighting mode for the document.
      *
-     * @return {Object|String} Object or Name of syntax-highlighting mode; see {@link EditorUtils#getModeFromFileExtension()}.
+     * @return {Object|String} Object or Name of syntax-highlighting mode; see {@link Languages#getLanguageFromFileExtension()} and {@link Language.mode}.
      */
     Editor.prototype.getModeForDocument = function () {
         return this._codeMirror.getOption("mode");
